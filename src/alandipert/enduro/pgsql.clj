@@ -2,33 +2,31 @@
   (:require [alandipert.enduro :as e]
             [clojure.java.jdbc :as sql]))
 
-(defn create-enduro-table! [table-name]
-  (sql/create-table table-name [:id :int] [:value :text]))
+(defn create-enduro-table! [db table-name value]
+  (sql/with-db-transaction [t-con db]
+    (sql/execute! t-con (sql/create-table-ddl table-name [[:id :int] [:value :text]]))
+    (sql/insert! t-con table-name {:id 0 :value (pr-str value)})))
 
-(defn delete-enduro-table! [table-name]
-  (sql/drop-table table-name))
+(defn delete-enduro-table! [db table-name]
+  (sql/db-do-commands db (sql/drop-table-ddl table-name)))
 
-(defn table-exists? [table-name]
-  (sql/with-query-results
-    tables ["SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'"]
-    (get (into #{} (map :table_name tables)) table-name)))
+(defn table-exists? [db table-name]
+  (->> (sql/query db ["SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'"])
+       (some #(= table-name (:table_name %)))))
 
-(defn get-value [table-name]
-  (sql/with-query-results rows
-    [(str "SELECT value FROM " table-name " LIMIT 1")]
-    (read-string (:value (first rows)))))
+(defn get-value [db table-name]
+  (->> (sql/query db [(str "SELECT value FROM " table-name " LIMIT 1")])
+       first
+       :value
+       read-string))
 
 (deftype PostgreSQLBackend [db-config table-name]
   e/IDurableBackend
   (-commit!
     [this value]
-    (sql/with-connection db-config
-      (sql/transaction
-       (sql/update-or-insert-values
-        table-name ["id=?" 0] {:id 0 :value (pr-str value)}))))
+    (sql/update! db-config table-name {:value (pr-str value)} ["id = ?" 0]))
   (-remove! [this]
-    (sql/with-connection db-config
-      (delete-enduro-table! table-name))))
+    (delete-enduro-table! db-config table-name)))
 
 (defn postgresql-atom
   #=(e/with-options-doc "Creates and returns a PostgreSQL-backed atom. If the location
@@ -42,11 +40,11 @@
   clojure.java.jdbc/with-connection")
   [init db-config table-name & opts]
   (e/atom*
-   (sql/with-connection db-config
-     (or (and (table-exists? table-name)
-              (get-value table-name))
+   (sql/with-db-connection [conn db-config]
+     (or (and (table-exists? conn table-name)
+              (get-value conn table-name))
          (do
-           (create-enduro-table! table-name)
+           (create-enduro-table! conn table-name init)
            init)))
    (PostgreSQLBackend. db-config table-name)
    (apply hash-map opts)))

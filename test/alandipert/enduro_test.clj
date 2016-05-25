@@ -18,8 +18,8 @@
 
 (defn get-connection []
   (if-let [database-url (System/getProperty test-db-property)]
-    (try (sql/with-connection database-url
-           database-url) 
+    (try (sql/query database-url "SELECT 1")
+         database-url 
          (catch org.postgresql.util.PSQLException p
            (throw (RuntimeException. db-connection-err p))))
     (throw (RuntimeException. db-connection-err))))
@@ -134,8 +134,7 @@
       (let [ea (with-sql-exception-unwrapping (pg/postgresql-atom 0 connection-string table-name))]
         (with-sql-exception-unwrapping (e/release! ea))
         (is (thrown? AssertionError @ea) "attempting to access an atom after it's been released should raise an Assertionerror")
-        (sql/with-connection connection-string
-          (is (not (pg/table-exists? table-name)) "releasing a pg-backed atom should delete the table"))))
+        (is (not (pg/table-exists? connection-string table-name)) "releasing a pg-backed atom should delete the table")))
 
     (testing "release and persistence across runs"
       (let [first-value (rand-int 100)

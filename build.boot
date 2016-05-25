@@ -3,7 +3,7 @@
  :source-paths #{"test"}
  :dependencies '[[adzerk/bootlaces      "0.1.11"        :scope "test"]
                  [postgresql            "8.4-702.jdbc4" :scope "test"]
-                 [org.clojure/java.jdbc "0.2.3"         :scope "test"]
+                 [org.clojure/java.jdbc "0.5.8"         :scope "test"]
                  [adzerk/boot-test      "1.0.4"         :scope "test"]])
 
 (require '[adzerk.bootlaces :refer :all]
