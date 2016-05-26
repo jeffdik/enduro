@@ -10,10 +10,6 @@
 (defn delete-enduro-table! [db table-name]
   (sql/db-do-commands db (sql/drop-table-ddl table-name)))
 
-(defn table-exists? [db table-name]
-  (->> (sql/query db ["SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'"])
-       (some #(= table-name (:table_name %)))))
-
 (defn get-value [db table-name]
   (->> (sql/query db [(str "SELECT value FROM " table-name " LIMIT 1")])
        first
@@ -41,10 +37,13 @@
   [init db-config table-name & opts]
   (e/atom*
    (sql/with-db-connection [conn db-config]
-     (or (and (table-exists? conn table-name)
-              (get-value conn table-name))
-         (do
-           (create-enduro-table! conn table-name init)
-           init)))
+     (try
+       (get-value conn table-name)
+       (catch java.sql.SQLException e
+         (if (re-find #"relation.*does not exist" (.getMessage e))
+           (do
+             (create-enduro-table! conn table-name init)
+             init)
+           (throw e)))))
    (PostgreSQLBackend. db-config table-name)
    (apply hash-map opts)))

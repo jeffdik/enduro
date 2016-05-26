@@ -118,10 +118,18 @@
 
          (is (= n @ea)))))))
 
+(defn table-exists? [db table-name]
+  (->> (sql/query db ["SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'public' AND table_name = ?"
+                      table-name])
+       first
+       :count
+       zero?
+       not))
+
 (deftest ^:postgres postgres-atom-semantics
   (let [connection-string (get-connection)
         table-name (some-random-table-name)]
-    
+
     (testing "atom persistence across runs"
       (let [some-value (rand-int 100)
             ea-1 (with-sql-exception-unwrapping (pg/postgresql-atom some-value connection-string table-name))
@@ -134,7 +142,7 @@
       (let [ea (with-sql-exception-unwrapping (pg/postgresql-atom 0 connection-string table-name))]
         (with-sql-exception-unwrapping (e/release! ea))
         (is (thrown? AssertionError @ea) "attempting to access an atom after it's been released should raise an Assertionerror")
-        (is (not (pg/table-exists? connection-string table-name)) "releasing a pg-backed atom should delete the table")))
+        (is (not (table-exists? connection-string table-name)) "releasing a pg-backed atom should delete the table")))
 
     (testing "release and persistence across runs"
       (let [first-value (rand-int 100)
