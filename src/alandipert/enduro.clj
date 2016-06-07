@@ -8,6 +8,7 @@
 
 (defprotocol IDurableBackend
   "Represents a durable resource."
+  (-deref! [this] "Gets the current value.")
   (-commit! [this value] "Attempt to commit value to resource, returning true if successful and false otherwise.")
   (-remove! [this] "Delete the persistent value. Clean up. Future calls to swap! or reset! will throw an exception."))
 
@@ -34,7 +35,8 @@
                      watches
                      ^alandipert.enduro.IDurableBackend resource
                      ^AtomicReference state
-                     released?]
+                     released?
+                     durable-deref?]
   clojure.lang.IMeta
   (meta [a] meta)
   clojure.lang.IRef
@@ -46,11 +48,13 @@
   clojure.lang.IDeref
   (deref [a]
     (assert (not @released?) "Can't access a released atom.")
+    (when durable-deref? (.set state (-deref! resource)))
     (.get state))
   IDurableAtom
   (-swap! [a f args]
     (assert (not @released?) "Can't access a released atom.")
     (loop []
+      (when durable-deref? (.set state (-deref! resource)))
       (let [v (.get state)
             newv (apply f v args)]
         (validate @validator newv)
@@ -90,7 +94,8 @@
                      (core/atom {})
                      resource
                      (AtomicReference. initial-state)
-                     (core/atom false))
+                     (core/atom false)
+                     (:durable-deref? opts))
     (swap! identity)))
 
 (defn with-options-doc [doc]

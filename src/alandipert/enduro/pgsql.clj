@@ -18,6 +18,8 @@
 
 (deftype PostgreSQLBackend [db-config table-name]
   e/IDurableBackend
+  (-deref! [this]
+    (get-value db-config table-name))
   (-commit!
     [this value]
     (sql/update! db-config table-name {:value (pr-str value)} ["id = ?" 0]))
@@ -33,7 +35,10 @@
   db-config can be a String URI, a map
   of :username/:password/:host/:port, or any other type of
   configuration object understood by
-  clojure.java.jdbc/with-connection")
+  clojure.java.jdbc/with-connection
+
+  Passing `:durable-deref? true` will get the value
+  from the database during a deref and for each swap! attempt.")
   [init db-config table-name & opts]
   (e/atom*
    (sql/with-db-connection [conn db-config]

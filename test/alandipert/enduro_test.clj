@@ -153,6 +153,25 @@
         (is (= second-value @ea-2) "the value of a released atom should not be persisted if a later atom is defined with the same table")
         (with-sql-exception-unwrapping (e/release! ea-2))))))
 
+(deftest ^:postgres postgres-concurrent
+  (let [connection-string (get-connection)
+        table-name (some-random-table-name)]
+
+    (testing "concurrency"
+      (let [some-value (rand-int 100)
+            ea-1 (with-sql-exception-unwrapping (pg/postgresql-atom some-value connection-string table-name :durable-deref? true))
+            ea-2 (with-sql-exception-unwrapping (pg/postgresql-atom some-value connection-string table-name :durable-deref? true))]
+        (is (= some-value @ea-1 @ea-2)
+            "all atoms initialized with the same table name should have the value previously stored in that table")
+
+        (is (= (inc some-value) (e/swap! ea-1 inc)))
+        (is (= (inc some-value) @ea-1 @ea-2) "all atoms should deref to the same value when ea-1 is updated")
+
+        (is (= (inc (inc some-value)) (e/swap! ea-2 inc)))
+        (is (= (inc (inc some-value)) @ea-1 @ea-2) "all atoms should deref to the same value when ea-2 is updated")
+
+        (with-sql-exception-unwrapping (e/release! ea-1))))))
+
 (deftest usage
   (testing "*print-length* unbound"
     (let [file (tmp)
